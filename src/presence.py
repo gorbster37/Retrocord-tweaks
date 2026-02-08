@@ -48,7 +48,6 @@ async def process_presence(bot, user, api_username, api_key):
                     json.dump(games, f, indent=4)
             else:
                 logger.info(f"Game ID {game_id} found in JSON.")
-
             return games
 
         # Fetch or add the last played game to games.json
@@ -64,7 +63,6 @@ async def process_presence(bot, user, api_username, api_key):
         # Set rich presence to a randomly selected game
         await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform})\nUser: {game_user}"))
         logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
-
 
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')
