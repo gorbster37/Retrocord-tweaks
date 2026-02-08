@@ -4,6 +4,7 @@ import random
 from services.api import UserProfile, GameDetails
 from utils.custom_logger import logger
 
+
 async def process_presence(bot, user, api_username, api_key):
     """Process the presence of a user in Discord by randomly setting their rich presence from games.json or adding new games.
 
@@ -40,14 +41,14 @@ async def process_presence(bot, user, api_username, api_key):
                 logger.info(f"Fetching game ID {game_id} from API.")
                 game_details = GameDetails(game_id, api_username, api_key)
                 game = game_details.get_game()
-                games[str(game_id)] = {"title": game.title, "platform": game.remap_console_name()}
-                
+                games[str(game_id)] = {"user": user_profile, "title": game.title, "platform": game.remap_console_name()}
+
                 # Save the new game to games.json
                 with open('games.json', 'w') as f:
                     json.dump(games, f, indent=4)
             else:
                 logger.info(f"Game ID {game_id} found in JSON.")
-            
+
             return games
 
         # Fetch or add the last played game to games.json
@@ -55,13 +56,15 @@ async def process_presence(bot, user, api_username, api_key):
 
         # Pick a random game from the updated games.json
         random_game_id = random.choice(list(games.keys()))
+        game_user = games[user]
         game_data = games[random_game_id]
         game_title = game_data["title"]
         game_platform = game_data["platform"]
 
         # Set rich presence to a randomly selected game
-        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform})"))
+        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform})\nUser: {game_user}"))
         logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
-    
+
+
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')
