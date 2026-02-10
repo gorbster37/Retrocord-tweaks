@@ -41,7 +41,7 @@ async def process_presence(bot, user, api_username, api_key):
                 logger.info(f"Fetching game ID {game_id} from API.")
                 game_details = GameDetails(game_id, api_username, api_key)
                 game = game_details.get_game()
-                games[str(game_id)] = {"user": user_profile, "title": game.title, "platform": game.remap_console_name()}
+                games[str(game_id)] = {"user": user, "title": game.title, "platform": game.remap_console_name()}
 
                 # Save the new game to games.json
                 with open('games.json', 'w') as f:
@@ -55,8 +55,8 @@ async def process_presence(bot, user, api_username, api_key):
 
         # Pick a random game from the updated games.json
         random_game_id = random.choice(list(games.keys()))
-        game_user = games[user]
         game_data = games[random_game_id]
+        game_user = game_data["user"]
         game_title = game_data["title"]
         game_platform = game_data["platform"]
 
