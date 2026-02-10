@@ -62,7 +62,7 @@ async def process_presence(bot, user, api_username, api_key):
         game_platform = game_data["platform"]
 
         # Set rich presence to a randomly selected game
-        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform})| User: {game_user}"))
+        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
         logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
 
     except Exception as e:
