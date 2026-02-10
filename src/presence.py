@@ -33,7 +33,8 @@ async def process_presence(bot, user, api_username, api_key):
             try:
                 with open('games.json', 'r') as f:
                     games = json.load(f)
-            except FileNotFoundError:
+            except (FileNotFoundError, json.JSONDecodeError):
+                logger.warning("games.json not found or corrupted, starting fresh.")
                 games = {}
 
             # If the game is not in games.json, fetch and add it
