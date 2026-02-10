@@ -1,4 +1,6 @@
 import asyncio
+import json
+
 from discord.ext import tasks, commands
 from src.achievements import process_achievements
 from src.daily_overview import process_daily_overview
@@ -68,6 +70,19 @@ class TasksCog(commands.Cog):
             delay = delay_until_next_interval('presence')  # Get the delay until the next 15th minute
             logger.info(f'Waiting {delay} seconds for Presence task to start')
             await asyncio.sleep(delay)  # Wait for the specified delay
+
+    @tasks.loop(hours=72)  # Clear games.json every 3 days
+    async def clear_games_json(self):
+        try:
+            with open('games.json', 'w') as f:
+                json.dump({}, f)
+            logger.info('Cleared games.json file.')
+        except Exception as e:
+            logger.error(f'Error clearing games.json: {e}')
+
+    @clear_games_json.before_loop
+    async def before_clear_games_json(self):
+        await self.bot.wait_until_ready()
 
 async def setup(bot):
     await bot.add_cog(TasksCog(bot, start_delay=TASK_START_DELAY))
