@@ -20,6 +20,7 @@ class TasksCog(commands.Cog):
         self.users = users
         self.current_user_index = 0
         self.process_presence.start()
+        self.clear_games_json.start()
 
     @tasks.loop(minutes=RETROACHIEVEMENTS_INTERVAL)
     async def process_achievements(self):
