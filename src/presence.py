@@ -33,7 +33,8 @@ async def process_presence(bot, user, api_username, api_key):
             try:
                 with open('games.json', 'r') as f:
                     games = json.load(f)
-            except FileNotFoundError:
+            except (FileNotFoundError, json.JSONDecodeError):
+                logger.warning("games.json not found or corrupted, starting fresh.")
                 games = {}
 
             # If the game is not in games.json, fetch and add it
@@ -41,14 +42,13 @@ async def process_presence(bot, user, api_username, api_key):
                 logger.info(f"Fetching game ID {game_id} from API.")
                 game_details = GameDetails(game_id, api_username, api_key)
                 game = game_details.get_game()
-                games[str(game_id)] = {"user": user_profile, "title": game.title, "platform": game.remap_console_name()}
+                games[str(game_id)] = {"user": user, "title": game.title, "platform": game.remap_console_name()}
 
                 # Save the new game to games.json
                 with open('games.json', 'w') as f:
                     json.dump(games, f, indent=4)
             else:
                 logger.info(f"Game ID {game_id} found in JSON.")
-
             return games
 
         # Fetch or add the last played game to games.json
@@ -56,15 +56,14 @@ async def process_presence(bot, user, api_username, api_key):
 
         # Pick a random game from the updated games.json
         random_game_id = random.choice(list(games.keys()))
-        game_user = games[user]
         game_data = games[random_game_id]
+        game_user = game_data["user"]
         game_title = game_data["title"]
         game_platform = game_data["platform"]
 
         # Set rich presence to a randomly selected game
-        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform})\nUser: {game_user}"))
+        await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
         logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
-
 
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')
