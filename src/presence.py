@@ -1,6 +1,8 @@
 import discord
 import json
 import random
+import time
+
 from services.api import UserProfile, GameDetails
 from utils.custom_logger import logger
 
@@ -42,7 +44,12 @@ async def process_presence(bot, user, api_username, api_key):
                 logger.info(f"Fetching game ID {game_id} from API.")
                 game_details = GameDetails(game_id, api_username, api_key)
                 game = game_details.get_game()
-                games[str(game_id)] = {"user": user, "title": game.title, "platform": game.remap_console_name()}
+                games[str(game_id)] = {
+                    "user": user,
+                    "title": game.title,
+                    "platform": game.remap_console_name(),
+                    "last_seen": time.time()
+                }
 
                 # Save the new game to games.json
                 with open('games.json', 'w') as f:
@@ -55,11 +62,48 @@ async def process_presence(bot, user, api_username, api_key):
         games = get_or_fetch_game(last_game_id)
 
         # Pick a random game from the updated games.json
-        random_game_id = random.choice(list(games.keys()))
-        game_data = games[random_game_id]
-        game_user = game_data["user"]
-        game_title = game_data["title"]
-        game_platform = game_data["platform"]
+        # Sort games by most recent activity
+        sorted_games = sorted(
+            games.items(),
+            key=lambda item: item[1].get("last_seen", 0),
+            reverse=True
+        )
+
+        # Take only the last 5 most recent games
+        recent_games = sorted_games[:5]
+
+        # Safety fallback (if games.json is empty)
+        if not recent_games:
+            return
+
+        # Remove same user as last presence (no back-to-back users)
+        if process_presence.last_presence_user is not None:
+            filtered_games = [
+                g for g in recent_games
+                if g[1].get("user") != process_presence.last_presence_user
+            ]
+
+            # If filtering removes everything, fall back to original list
+            if filtered_games:
+                recent_games = filtered_games
+
+        # Pick randomly from recent pool
+        random_game_id, game_data = random.choice(recent_games)
+
+        # Extract selected game info
+        game_title = game_data.get("title")
+        game_platform = game_data.get("platform")
+        game_user = game_data.get("user")
+
+        # Store last user to prevent repeats
+        process_presence.last_presence_user = game_user
+
+        # Update last_seen for selected game
+        games[random_game_id]["last_seen"] = time.time()
+
+        # Save updated games.json
+        with open('games.json', 'w') as f:
+            json.dump(games, f, indent=4)
 
         # Set rich presence to a randomly selected game
         await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
