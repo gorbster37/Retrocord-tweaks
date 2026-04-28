@@ -183,7 +183,7 @@ async def process_presence(bot, user, api_username, api_key):
 
         # Set rich presence to the selected recently played game
         await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
-        logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
+        logger.info(f"Setting rich presence to {game_title} ({game_platform}) for user {game_user}; refreshed user {user}")
 
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')
