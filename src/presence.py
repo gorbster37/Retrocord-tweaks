@@ -1,5 +1,6 @@
 import discord
 import json
+import random
 from datetime import datetime, timedelta
 
 from services.api import UserRecentlyPlayedGames
@@ -168,8 +169,8 @@ async def process_presence(bot, user, api_username, api_key):
             if filtered_games:
                 recent_games = filtered_games
 
-        # Pick the most recently played game from the eligible pool
-        game_user, game_data = recent_games[0]
+        # Pick any eligible game while avoiding the same user twice when possible
+        game_user, game_data = random.choice(recent_games)
 
         # Extract selected game info
         game_title = game_data.get("title")
