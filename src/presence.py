@@ -2,7 +2,8 @@ import discord
 import json
 from datetime import datetime, timedelta
 
-from services.api import UserRecentlyPlayedGames
+from services.api import get_user_recently_played_games
+from services.ra_client import RetroAchievementsClient
 from utils.achievement import CONSOLE_NAME_MAP
 from utils.custom_logger import logger
 
@@ -103,14 +104,14 @@ def update_user_games(cache, user, recent_games, cutoff):
     return cache
 
 
-def refresh_presence_cache_for_user(user, api_username, api_key, cache=None):
+async def refresh_presence_cache_for_user(user, client: RetroAchievementsClient, cache=None, request_type="presence"):
     cutoff = datetime.utcnow() - timedelta(days=PRESENCE_ACTIVE_WINDOW_DAYS)
-    user_recent_games = UserRecentlyPlayedGames(
+    user_recent_games = await get_user_recently_played_games(
+        client,
         user,
-        api_username,
-        api_key,
-        PRESENCE_RECENT_GAMES_COUNT
-    ).get_games()
+        PRESENCE_RECENT_GAMES_COUNT,
+        request_type=request_type,
+    )
     return update_user_games(cache or load_presence_cache(), user, user_recent_games, cutoff)
 
 
@@ -129,14 +130,13 @@ def get_recent_presence_games(cache):
     return active_games[:5]
 
 
-async def process_presence(bot, user, api_username, api_key):
+async def process_presence(bot, user, client: RetroAchievementsClient):
     """Process the presence of a user in Discord from recently played games.
 
     Args:
         bot: The Discord bot instance.
         user: The user for whom the presence is being processed.
-        api_username: The API username for fetching user data.
-        api_key: The API key for authentication.
+        client: The shared RetroAchievements client.
 
     Returns:
         None
@@ -145,10 +145,10 @@ async def process_presence(bot, user, api_username, api_key):
         Exception: If an error occurs during the processing.
 
     Examples:
-        await process_presence(bot_instance, user_instance, 'api_username', 'api_key')
+        await process_presence(bot_instance, user_instance, api_client)
     """
     try:
-        games = refresh_presence_cache_for_user(user, api_username, api_key)
+        games = await refresh_presence_cache_for_user(user, client)
         recent_games = get_recent_presence_games(games)
 
         # Safety fallback (if games.json is empty)

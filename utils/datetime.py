@@ -1,22 +1,28 @@
 import pytz
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from config.config import RETROACHIEVEMENTS_INTERVAL, PRESENCE_INTERVAL
 
-def get_now_and_yesterday_epoch():
+try:
+    from config.config import DAILY_OVERVIEW_TIMEZONE
+except ImportError:
+    DAILY_OVERVIEW_TIMEZONE = "America/New_York"
+
+def get_rolling_epoch_range(timezone_name=DAILY_OVERVIEW_TIMEZONE, end_time=None):
     """
-    A function to get the epoch time of yesterday and now in the Europe/Amsterdam timezone.
+    Return one rolling 24-hour epoch range in the configured local timezone.
 
     Returns:
     Tuple of two integers representing the epoch time of yesterday and now.
     """
-    now_utc = datetime.now(pytz.utc)
-    amsterdam_tz = pytz.timezone('Europe/Amsterdam')
-    now_amsterdam = now_utc.astimezone(amsterdam_tz)
-    yesterday_amsterdam = now_amsterdam - timedelta(days=1)
-    yesterday_epoch = int(yesterday_amsterdam.timestamp())
-    now_epoch = int(now_amsterdam.timestamp())
+    timezone = ZoneInfo(timezone_name)
+    end = end_time.astimezone(timezone) if end_time else datetime.now(timezone)
+    start = end - timedelta(hours=24)
+    return int(start.timestamp()), int(end.timestamp())
 
-    return yesterday_epoch, now_epoch
+def get_now_and_yesterday_epoch():
+    """Backward-compatible name for the configured rolling daily range."""
+    return get_rolling_epoch_range()
 
 def delay_until_next_interval(interval_type):
     """

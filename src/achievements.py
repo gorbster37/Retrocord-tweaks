@@ -2,103 +2,149 @@ import discord
 import json
 from datetime import datetime
 
-from services.api import UserProgressGameInfo, UserCompletionRecent, UserProfile, UserCompletionProgress, GameUnlocks
+from services.achievement_scan import AchievementScanState
+from services.api import (
+    get_achievement_distribution,
+    get_game_info_and_user_progress,
+    get_user_completion_progress,
+    get_user_profile,
+    get_user_recent_achievements,
+)
+from services.api_cache import ApiCache
+from services.ra_client import RetroAchievementsClient
 from utils.image import get_discord_color
 from utils.datetime import ordinal
-from config.config import api_key, api_username, DISCORD_IMAGE, ACHIEVEMENT_EMBED_STYLE
+from config.config import DISCORD_IMAGE, ACHIEVEMENT_EMBED_STYLE
 
 from utils.custom_logger import logger
 
-async def process_achievements(users, api_username, api_key, achievements_channel, mastery_channel):
+async def process_achievements(
+    users,
+    client: RetroAchievementsClient,
+    achievements_channel,
+    mastery_channel,
+    scan_state: AchievementScanState,
+    api_cache: ApiCache,
+):
     achievement_embeds = []
     mastery_embeds = []
+    successful_markers = {}
     for user in users:
+        started_at = scan_state.now()
         try:
-            user_completion = get_user_completion(user, api_username, api_key)
-            if user_completion.achievements:
-                profile, game_details, game_achievements = get_user_profile_and_achievements(user_completion)
-                mastery_count = -1
+            lookback_minutes = scan_state.lookback_minutes(user, started_at)
+            recent_achievements = await get_user_recent_achievements(
+                client,
+                user,
+                lookback_minutes,
+                request_type="achievement",
+            )
+            achievements = scan_state.filter_new(user, recent_achievements)
+            if achievements:
+                profile = await get_user_profile(
+                    client, user, request_type="achievement"
+                )
+                game_details, game_achievements = await get_achievements(
+                    user, achievements, client
+                )
+                completed_games = []
                 for game_id, achievements in game_achievements.items():
                     game = game_details[game_id]
-                    process_game_achievements(game, user_completion, achievements, profile, achievement_embeds)
+                    process_game_achievements(
+                        game, user, achievements, profile, achievement_embeds
+                    )
                     if game.is_completed():
-                        mastery_count += 1
-                        process_game_mastery(game, user_completion, profile, mastery_embeds, mastery_count)
+                        completed_games.append(game)
+
+                if completed_games:
+                    progress = await get_user_completion_progress(
+                        client, user, request_type="achievement"
+                    )
+                    for mastery_count, game in enumerate(completed_games):
+                        await process_game_mastery(
+                            game,
+                            user,
+                            profile,
+                            mastery_embeds,
+                            mastery_count,
+                            progress,
+                            client,
+                            api_cache,
+                        )
             else:
                 logger.info(f'No achievements found for user {user}')
+            successful_markers[user] = started_at
         except Exception as e:
             logger.error(f'Error processing user {user}: {e}')
 
         logger.info(f'Finished fetching achievements for user {user}')
 
-    await send_achievement_embeds(achievement_embeds, achievements_channel)
-    await send_mastery_embeds(mastery_embeds, mastery_channel)
-
-def get_user_completion(user, api_username, api_key):
-    user_completion = UserCompletionRecent(user, api_username, api_key)
-    logger.info(f'Starting to get achievements for user {user}')
-    return user_completion
-
-def get_user_profile_and_achievements(user_completion):
-    profile = UserProfile(user_completion.user, api_username, api_key)
-    game_details, game_achievements = get_achievements(user_completion)
-    return profile, game_details, game_achievements
-
-def get_game_details(game_id, username, api_username, api_key):
     try:
-        return UserProgressGameInfo(
-            game_id, username, api_username, api_key
-        ).get_game()
-    except Exception as e:
-        logger.error(f'Error getting game progress details for game {game_id}: {e}')
+        await send_achievement_embeds(achievement_embeds, achievements_channel)
+        await send_mastery_embeds(mastery_embeds, mastery_channel)
+    except Exception as error:
+        logger.error(f'Error sending achievement messages: {error}')
+    else:
+        scan_state.mark_successful(successful_markers)
 
-def get_achievements(user_completion):
-    try:
-        achievements = user_completion.get_achievements()
-        game_ids = set()
-        game_details = {}
-        game_achievements = {}
 
-        for achievement in achievements:
-            game_ids.add(achievement.game_id)
-            logger.info(f"{user_completion.user} has earned an achievement: {achievement.title} ({achievement.points}) ({achievement.retropoints}) for {achievement.game_title}")
-            if achievement.game_id not in game_achievements:
-                game_achievements[achievement.game_id] = []
-            game_achievements[achievement.game_id].append(achievement)
+async def get_achievements(user, achievements, client):
+    game_ids = set()
+    game_details = {}
+    game_achievements = {}
 
-        logger.debug(f'Found {len(game_ids)} unique game IDs in achievements')
+    for achievement in achievements:
+        game_ids.add(achievement.game_id)
+        logger.info(
+            f"{user} has earned an achievement: {achievement.title} "
+            f"({achievement.points}) ({achievement.retropoints}) for {achievement.game_title}"
+        )
+        game_achievements.setdefault(achievement.game_id, []).append(achievement)
 
-        for game_id in game_ids:
-            logger.info(f'Getting game progress details for game {game_id}')
-            game = get_game_details(game_id, user_completion.user, api_username, api_key)
-            game_details[game_id] = game
-            logger.info(f'Got game progress details for game {game_id}')
+    logger.debug(f'Found {len(game_ids)} unique game IDs in achievements')
+    for game_id in game_ids:
+        logger.info(f'Getting game progress details for game {game_id}')
+        game_details[game_id] = await get_game_info_and_user_progress(
+            client, game_id, user, request_type="achievement"
+        )
+        logger.info(f'Got game progress details for game {game_id}')
 
-        return game_details, game_achievements
-    except Exception as e:
-        logger.error(f'Error getting achievements for user {user_completion.user}: {e}')
+    return game_details, game_achievements
 
-def process_game_achievements(game, user_completion, achievements, profile, achievement_embeds):
+
+def process_game_achievements(game, user, achievements, profile, achievement_embeds):
     achievements.sort(key=lambda x: datetime.strptime(x.date, "%Y-%m-%d %H:%M:%S"))
     for i, achievement in enumerate(achievements):
-        embed = create_achievement_embed(game, user_completion.user, achievement, profile, i+1, len(achievements))
+        embed = create_achievement_embed(game, user, achievement, profile, i+1, len(achievements))
         achievement_embeds.append((datetime.strptime(achievement.date, "%Y-%m-%d %H:%M:%S"), embed))
 
-def process_game_mastery(game, user_completion, profile, mastery_embeds, mastery_count):
-    user_progress = UserCompletionProgress(user_completion.user, api_username, api_key)
-    game_unlocks = GameUnlocks(api_username, api_key, game.id)
-    unlock_distribution = game_unlocks.get_distribution()
+async def process_game_mastery(
+    game,
+    user,
+    profile,
+    mastery_embeds,
+    mastery_count,
+    progress,
+    client,
+    api_cache,
+):
+    unlock_distribution = await get_achievement_distribution(
+        client, api_cache, game.id, request_type="achievement"
+    )
     highest_unlock = unlock_distribution.get_highest_unlock()
-    progress = user_progress.get_progress()
     mastered_count = ordinal(int(progress.count_mastered()) - mastery_count)
     mastery_time = game.days_since_last_achievement()
-    mastery_percentage = round((highest_unlock / game.total_players_hardcore) * 100, 2)
+    mastery_percentage = (
+        round((highest_unlock / game.total_players_hardcore) * 100, 2)
+        if highest_unlock is not None and game.total_players_hardcore
+        else 0
+    )
     if game_progress := next(
         (result for result in progress.results if result.game_id == game.id),
         None,
     ):
-        logger.info(f"{user_completion.user} has mastered {game.title}! {game.total_achievements} achievements have been earned in {mastery_time}! {highest_unlock} out of {game.total_players_hardcore} players have mastered the game! ({mastery_percentage}%)")
-        mastery_embed = create_mastery_embed(game, user_completion.user, profile, game_progress, mastered_count, mastery_time, highest_unlock, mastery_percentage)
+        logger.info(f"{user} has mastered {game.title}! {game.total_achievements} achievements have been earned in {mastery_time}! {highest_unlock} out of {game.total_players_hardcore} players have mastered the game! ({mastery_percentage}%)")
+        mastery_embed = create_mastery_embed(game, user, profile, game_progress, mastered_count, mastery_time, highest_unlock, mastery_percentage)
         mastery_embeds.append((datetime.strptime(game_progress.highest_award_date, "%Y-%m-%dT%H:%M:%S%z"), mastery_embed))
         
 # Embed creation wrapper function
