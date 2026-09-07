@@ -1,13 +1,17 @@
 import asyncio
-import json
 
 from discord.ext import tasks, commands
 from src.achievements import process_achievements
 from src.daily_overview import process_daily_overview
-from src.presence import process_presence
+from src.presence import load_presence_cache, process_presence, refresh_presence_cache_for_user, save_presence_cache
 from utils.datetime import delay_until_next_interval, delay_until_next_midnight
 from config.config import users, api_key, api_username, ACHIEVEMENTS_CHANNEL_ID, DAILY_OVERVIEW_CHANNEL_ID, MASTERY_CHANNEL_ID, RETROACHIEVEMENTS_INTERVAL, PRESENCE_INTERVAL, TASK_START_DELAY
 from utils.custom_logger import logger
+
+try:
+    from config.config import PRESENCE_STARTUP_USER_DELAY_SECONDS
+except ImportError:
+    PRESENCE_STARTUP_USER_DELAY_SECONDS = 1
 
 class TasksCog(commands.Cog):
     def __init__(self, bot: commands.Bot, start_delay: dict = None) -> None:
@@ -19,8 +23,20 @@ class TasksCog(commands.Cog):
         # Initialize the current_user_index to 0
         self.users = users
         self.current_user_index = 0
+        self.presence_preload_task = self.bot.loop.create_task(self.preload_presence_cache())
         self.process_presence.start()
-        self.clear_games_json.start()
+
+    async def preload_presence_cache(self):
+        await self.bot.wait_until_ready()
+        cache = load_presence_cache()
+        for user in self.users:
+            try:
+                cache = refresh_presence_cache_for_user(user, api_username, api_key, cache)
+                save_presence_cache(cache)
+            except Exception as e:
+                logger.error(f'Error preloading presence cache for user {user}: {e}')
+            await asyncio.sleep(PRESENCE_STARTUP_USER_DELAY_SECONDS)
+        logger.info('Finished preloading presence cache.')
 
     @tasks.loop(minutes=RETROACHIEVEMENTS_INTERVAL)
     async def process_achievements(self):
@@ -67,23 +83,12 @@ class TasksCog(commands.Cog):
     @process_presence.before_loop
     async def before_process_presence(self):
         await self.bot.wait_until_ready()  # Wait until the bot has connected to the discord API
+        if self.presence_preload_task:
+            await self.presence_preload_task
         if self.start_delay.get('process_presence', False):  # Only delay the start of the task if its value in the start_delay dictionary is True
             delay = delay_until_next_interval('presence')  # Get the delay until the next 15th minute
             logger.info(f'Waiting {delay} seconds for Presence task to start')
             await asyncio.sleep(delay)  # Wait for the specified delay
-
-    @tasks.loop(hours=72)  # Clear games.json every 3 days
-    async def clear_games_json(self):
-        try:
-            with open('games.json', 'w') as f:
-                json.dump({}, f)
-            logger.info('Cleared games.json file.')
-        except Exception as e:
-            logger.error(f'Error clearing games.json: {e}')
-
-    @clear_games_json.before_loop
-    async def before_clear_games_json(self):
-        await self.bot.wait_until_ready()
 
 async def setup(bot):
     await bot.add_cog(TasksCog(bot, start_delay=TASK_START_DELAY))

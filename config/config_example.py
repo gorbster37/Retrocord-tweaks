@@ -14,6 +14,9 @@ DAILY_OVERVIEW_CHANNEL_ID: The Discord channel ID to send the daily RetroAchieve
 MASTERY_CHANNEL_ID: The Discord channel ID to send the mastery updates to
 API_INTERVAL: The number of minutes to wait between Achievement requests, default is 15 minutes, minimum is 1 minute
 PRESENCE_INTERVAL: The number of minutes to wait between Presence requests, default is 120 minutes, minimum is 1 minute
+PRESENCE_ACTIVE_WINDOW_DAYS: The number of days a user's recently played games remain eligible for presence, default is 3 days
+PRESENCE_RECENT_GAMES_COUNT: The number of recently played games to fetch per presence check, default is 2
+PRESENCE_STARTUP_USER_DELAY_SECONDS: The number of seconds to wait between users while preloading the presence cache at startup, default is 1 second
 DAILY_OVERVIEW_USER_DELAY_SECONDS: The number of seconds to wait between users during the daily overview task, default is 1 second
 TASK_START_DELAY: A dictionary to specify if the tasks should start immediately or wait until the next 15th minute, useful for debugging if set to False
 """
@@ -34,6 +37,9 @@ MASTERY_CHANNEL_ID = ""
 RETROACHIEVEMENTS_INTERVAL = 5
 PRESENCE_INTERVAL = 120
 ACHIEVEMENT_EMBED_STYLE = 2
+PRESENCE_ACTIVE_WINDOW_DAYS = 3
+PRESENCE_RECENT_GAMES_COUNT = 2
+PRESENCE_STARTUP_USER_DELAY_SECONDS = 1
 DAILY_OVERVIEW_USER_DELAY_SECONDS = 1
 
 # The delay before starting the tasks, useful for debugging, otherwise it will start within the first 15th minute

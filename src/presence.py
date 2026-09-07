@@ -1,14 +1,137 @@
 import discord
 import json
 import random
-import time
+from datetime import datetime, timedelta
 
-from services.api import UserProfile, GameDetails
+from services.api import UserRecentlyPlayedGames
+from utils.achievement import CONSOLE_NAME_MAP
 from utils.custom_logger import logger
+
+try:
+    from config.config import PRESENCE_ACTIVE_WINDOW_DAYS
+except ImportError:
+    PRESENCE_ACTIVE_WINDOW_DAYS = 3
+
+try:
+    from config.config import PRESENCE_RECENT_GAMES_COUNT
+except ImportError:
+    PRESENCE_RECENT_GAMES_COUNT = 2
+
+LAST_PLAYED_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def load_presence_cache():
+    try:
+        with open('games.json', 'r') as f:
+            cache = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        logger.warning("games.json not found or corrupted, starting fresh.")
+        return {"users": {}}
+
+    if "users" in cache:
+        users_cache = {}
+        for cached_user, user_games in cache.get("users", {}).items():
+            if isinstance(user_games, list):
+                users_cache[cached_user] = user_games
+            elif isinstance(user_games, dict):
+                users_cache[cached_user] = [{
+                    "game_id": user_games.get("game_id"),
+                    "title": user_games.get("title"),
+                    "platform": user_games.get("platform"),
+                    "last_played": user_games.get("last_played")
+                }]
+        return {"users": users_cache}
+
+    users_cache = {}
+    for game_id, game_data in cache.items():
+        cached_user = game_data.get("user")
+        if cached_user:
+            users_cache.setdefault(cached_user, []).append({
+                "game_id": str(game_id),
+                "title": game_data.get("title"),
+                "platform": game_data.get("platform"),
+                "last_played": None
+            })
+
+    return {"users": users_cache}
+
+
+def save_presence_cache(cache):
+    with open('games.json', 'w') as f:
+        json.dump(cache, f, indent=4)
+
+
+def parse_last_played(last_played, user=None):
+    if not last_played:
+        return None
+    try:
+        return datetime.strptime(last_played, LAST_PLAYED_FORMAT)
+    except ValueError:
+        user_text = f" for user {user}" if user else ""
+        logger.warning(f"Invalid LastPlayed value{user_text}: {last_played}")
+        return None
+
+
+def is_recent(last_played, cutoff):
+    played_at = parse_last_played(last_played)
+    return played_at is not None and played_at >= cutoff
+
+
+def format_game(game):
+    console_name = game.get("ConsoleName", "N/A")
+    return {
+        "game_id": str(game.get("GameID", "N/A")),
+        "title": game.get("Title", "N/A"),
+        "platform": CONSOLE_NAME_MAP.get(console_name, console_name),
+        "last_played": game.get("LastPlayed")
+    }
+
+
+def update_user_games(cache, user, recent_games, cutoff):
+    games_for_user = [
+        format_game(game)
+        for game in recent_games
+        if is_recent(game.get("LastPlayed"), cutoff)
+    ]
+
+    users_cache = cache.setdefault("users", {})
+    if games_for_user:
+        users_cache[user] = games_for_user
+        logger.info(f"Found {len(games_for_user)} recently played games for user {user}")
+    else:
+        users_cache.pop(user, None)
+        logger.info(f"No games played within {PRESENCE_ACTIVE_WINDOW_DAYS} days for user {user}")
+    return cache
+
+
+def refresh_presence_cache_for_user(user, api_username, api_key, cache=None):
+    cutoff = datetime.utcnow() - timedelta(days=PRESENCE_ACTIVE_WINDOW_DAYS)
+    user_recent_games = UserRecentlyPlayedGames(
+        user,
+        api_username,
+        api_key,
+        PRESENCE_RECENT_GAMES_COUNT
+    ).get_games()
+    return update_user_games(cache or load_presence_cache(), user, user_recent_games, cutoff)
+
+
+def get_recent_presence_games(cache):
+    cutoff = datetime.utcnow() - timedelta(days=PRESENCE_ACTIVE_WINDOW_DAYS)
+    active_games = [
+        (cached_user, game_data)
+        for cached_user, user_games in cache.get("users", {}).items()
+        for game_data in user_games
+        if is_recent(game_data.get("last_played"), cutoff)
+    ]
+    active_games.sort(
+        key=lambda item: parse_last_played(item[1].get("last_played")) or datetime.min,
+        reverse=True
+    )
+    return active_games[:5]
 
 
 async def process_presence(bot, user, api_username, api_key):
-    """Process the presence of a user in Discord by randomly setting their rich presence from games.json or adding new games.
+    """Process the presence of a user in Discord from recently played games.
 
     Args:
         bot: The Discord bot instance.
@@ -26,88 +149,42 @@ async def process_presence(bot, user, api_username, api_key):
         await process_presence(bot_instance, user_instance, 'api_username', 'api_key')
     """
     try:
-        # Fetch user profile and last game played
-        user_profile = UserProfile(user, api_username, api_key)
-        profile = user_profile.get_profile()
-        last_game_id = profile.last_game_id
-
-        def get_or_fetch_game(game_id):
-            try:
-                with open('games.json', 'r') as f:
-                    games = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError):
-                logger.warning("games.json not found or corrupted, starting fresh.")
-                games = {}
-
-            # If the game is not in games.json, fetch and add it
-            if str(game_id) not in games:
-                logger.info(f"Fetching game ID {game_id} from API.")
-                game_details = GameDetails(game_id, api_username, api_key)
-                game = game_details.get_game()
-                games[str(game_id)] = {
-                    "user": user,
-                    "title": game.title,
-                    "platform": game.remap_console_name(),
-                    "last_seen": time.time()
-                }
-
-                # Save the new game to games.json
-                with open('games.json', 'w') as f:
-                    json.dump(games, f, indent=4)
-            else:
-                logger.info(f"Game ID {game_id} found in JSON.")
-            return games
-
-        # Fetch or add the last played game to games.json
-        games = get_or_fetch_game(last_game_id)
-
-        # Pick a random game from the updated games.json
-        # Sort games by most recent activity
-        sorted_games = sorted(
-            games.items(),
-            key=lambda item: item[1].get("last_seen", 0),
-            reverse=True
-        )
-
-        # Take only the last 5 most recent games
-        recent_games = sorted_games[:5]
+        games = refresh_presence_cache_for_user(user, api_username, api_key)
+        recent_games = get_recent_presence_games(games)
 
         # Safety fallback (if games.json is empty)
         if not recent_games:
+            save_presence_cache(games)
             return
 
         # Remove same user as last presence (no back-to-back users)
-        if process_presence.last_presence_user is not None:
+        last_presence_user = getattr(process_presence, "last_presence_user", None)
+        if last_presence_user is not None:
             filtered_games = [
                 g for g in recent_games
-                if g[1].get("user") != process_presence.last_presence_user
+                if g[0] != last_presence_user
             ]
 
             # If filtering removes everything, fall back to original list
             if filtered_games:
                 recent_games = filtered_games
 
-        # Pick randomly from recent pool
-        random_game_id, game_data = random.choice(recent_games)
+        # Pick any eligible game while avoiding the same user twice when possible
+        game_user, game_data = random.choice(recent_games)
 
         # Extract selected game info
         game_title = game_data.get("title")
         game_platform = game_data.get("platform")
-        game_user = game_data.get("user")
 
         # Store last user to prevent repeats
         process_presence.last_presence_user = game_user
 
-        # Update last_seen for selected game
-        games[random_game_id]["last_seen"] = time.time()
-
         # Save updated games.json
-        with open('games.json', 'w') as f:
-            json.dump(games, f, indent=4)
+        save_presence_cache(games)
 
-        # Set rich presence to a randomly selected game
+        # Set rich presence to the selected recently played game
         await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
-        logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
+        logger.info(f"Setting rich presence to {game_title} ({game_platform}) for user {game_user}; refreshed user {user}")
 
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')

@@ -194,6 +194,31 @@ class UserProfile(BaseAPI):
 
     def get_profile(self) -> Profile:
         return self.profile
+
+class UserRecentlyPlayedGames(BaseAPI):
+    """
+    UserRecentlyPlayedGames
+
+    Explanation:
+    Retrieves a user's recently played games.
+
+    Args:
+    - username: The username of the user.
+    - api_username: The API username for authentication.
+    - api_key: The API key for authentication.
+    - count: The number of recent games to retrieve.
+
+    Returns:
+    - list: A list of recently played game data.
+    """
+    def __init__(self, username: str, api_username: str, api_key: str, count: int = 5):
+        super().__init__("API_GetUserRecentlyPlayedGames.php", {'z': api_username, 'y': api_key, 'u': username, 'c': count})
+        logger.debug(f"Fetching recently played games for user {username}")
+        self.user = username
+        self.games = self.fetch_data()
+
+    def get_games(self) -> list:
+        return self.games
     
 class GameUnlocks(BaseAPI):
     """
