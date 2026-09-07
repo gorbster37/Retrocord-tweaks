@@ -1,30 +1,36 @@
-import asyncio
-
 import discord
 
-from services.api import UserCompletionByDate, UserProfile
+from services.api import get_achievements_earned_between, get_user_profile
+from services.ra_client import RetroAchievementsClient
 from utils.image import get_discord_color
-from utils.datetime import get_now_and_yesterday_epoch
+from utils.datetime import get_rolling_epoch_range
 from config.config import DISCORD_IMAGE, RETRO_DAILY_IMAGE
 from utils.custom_logger import logger
-
-try:
-    from config.config import DAILY_OVERVIEW_USER_DELAY_SECONDS
-except ImportError:
-    DAILY_OVERVIEW_USER_DELAY_SECONDS = 1
 
 def format_points(points):
     return format(points, ',').replace(',', '.') if points >= 10000 else str(points)
 
-async def process_daily_overview(users, api_username, api_key, channel):
+async def process_daily_overview(
+    users,
+    client: RetroAchievementsClient,
+    channel,
+    start_epoch=None,
+    end_epoch=None,
+):
+    if start_epoch is None or end_epoch is None:
+        start_epoch, end_epoch = get_rolling_epoch_range()
     all_embeds = []
     for user in users:
         try:
-            yesterday, now = get_now_and_yesterday_epoch()
-            user_completion = UserCompletionByDate(user, api_username, api_key, yesterday, now)
-            achievements = user_completion.get_achievements()
+            achievements = await get_achievements_earned_between(
+                client,
+                user,
+                start_epoch,
+                end_epoch,
+                request_type="daily",
+            )
             if achievements:  # Only process if there are achievements
-                profile = UserProfile(user, api_username, api_key)
+                profile = await get_user_profile(client, user, request_type="daily")
                 achievement_count, daily_hardcore_points, daily_softcore_points, daily_retropoints = count_daily_points(achievements)
                 max_achievement = find_max_achievement(achievements)
                 fav_game_details = favorite_game(achievements)
@@ -33,7 +39,6 @@ async def process_daily_overview(users, api_username, api_key, channel):
                 all_embeds.append(embed)
         except Exception as e:
             logger.error(f'Error processing user {user}: {e}')
-        await asyncio.sleep(DAILY_OVERVIEW_USER_DELAY_SECONDS)
 
     if all_embeds:
         logger.info(f"Sending {len(all_embeds)} embeds to {channel}")
