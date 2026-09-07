@@ -1,5 +1,6 @@
 import discord
 import json
+import random
 from datetime import datetime, timedelta
 
 from services.api import get_user_recently_played_games
@@ -168,8 +169,8 @@ async def process_presence(bot, user, client: RetroAchievementsClient):
             if filtered_games:
                 recent_games = filtered_games
 
-        # Pick the most recently played game from the eligible pool
-        game_user, game_data = recent_games[0]
+        # Vary the displayed game while keeping the most recently active games eligible.
+        game_user, game_data = random.choice(recent_games)
 
         # Extract selected game info
         game_title = game_data.get("title")
@@ -183,7 +184,10 @@ async def process_presence(bot, user, client: RetroAchievementsClient):
 
         # Set rich presence to the selected recently played game
         await bot.change_presence(activity=discord.Game(name=f"{game_title} ({game_platform}) | User: {game_user}"))
-        logger.info(f"Setting rich presence for {user} to {game_title} ({game_platform})")
+        logger.info(
+            f"Setting rich presence to {game_title} ({game_platform}) for user {game_user}; "
+            f"refreshed user {user}"
+        )
 
     except Exception as e:
         logger.error(f'Error processing user {user}: {e}')
