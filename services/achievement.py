@@ -1,7 +1,12 @@
 from config.config import BASE_URL
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
 from utils.achievement import CONSOLE_NAME_MAP
+
+try:
+    from config.config import DAILY_OVERVIEW_TIMEZONE
+except ImportError:
+    DAILY_OVERVIEW_TIMEZONE = "America/New_York"
 
 class Achievement:
     """
@@ -23,7 +28,7 @@ class Achievement:
         self.console_name = data.get('ConsoleName', "N/A")
         self.cumul_score = data.get('CumulScore', "N/A")
         self.date = data.get('Date', "N/A")
-        self.date_amsterdam = self.format_date(self.date) if self.date != "N/A" else "N/A"
+        self.date_local = self.format_date(self.date) if self.date != "N/A" else "N/A"
         self.description = data.get('Description', "N/A")
         self.game_icon = f"{BASE_URL}{data.get('GameIcon', '')}"
         self.game_id = data.get('GameID', "N/A")
@@ -55,7 +60,7 @@ class Achievement:
 
     def format_date(self, date: str) -> str:
         """
-        Formats the date to Amsterdam timezone.
+        Formats the date in the configured local timezone.
 
         Parameters
         ----------
@@ -67,7 +72,12 @@ class Achievement:
         str
             The formatted date.
         """
-        return datetime.strptime(date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC).astimezone(pytz.timezone('Europe/Amsterdam')).strftime("%d/%m/%y %H:%M:%S")
+        return (
+            datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+            .replace(tzinfo=ZoneInfo("UTC"))
+            .astimezone(ZoneInfo(DAILY_OVERVIEW_TIMEZONE))
+            .strftime("%d/%m/%y %H:%M:%S")
+        )
 
     def remap_console_name(self) -> str:
             """

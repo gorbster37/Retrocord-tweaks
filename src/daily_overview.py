@@ -79,12 +79,12 @@ def extract_favorite_game(game_counts):
     return favorite_game, fav_details[0], fav_details[1], fav_details[2], format_points(fav_details[3]), format_points(fav_details[4])
 
 def create_embed(profile, daily_hardcore_points, daily_softcore_points, daily_retropoints, max_achievement, fav_game, fav_game_achievements, fav_url, fav_console_name, fav_game_points, fav_game_retropoints, achievements):
-    embed_color = get_discord_color(max_achievement.badge_url if max_achievement else profile.profile.user_pic_unique)
+    embed_color = get_discord_color(max_achievement.badge_url if max_achievement else profile.user_pic_unique)
     embed = discord.Embed(title='', description='', color=embed_color).set_footer(
-        text=f"Hardcore Points: {profile.profile.total_points_format} • Softcore Points: {profile.profile.total_softcore_points} • Retro Points: {profile.profile.total_true_points_format}",
-        icon_url=profile.profile.user_pic_unique
+        text=f"Hardcore Points: {profile.total_points_format} • Softcore Points: {profile.total_softcore_points} • Retro Points: {profile.total_true_points_format}",
+        icon_url=profile.user_pic_unique
     ).set_author(
-        name=f"Daily Overview for {profile.profile.user}",
+        name=f"Daily Overview for {profile.user}",
         icon_url=RETRO_DAILY_IMAGE
     ).set_image(
         url=DISCORD_IMAGE
@@ -93,7 +93,7 @@ def create_embed(profile, daily_hardcore_points, daily_softcore_points, daily_re
         hardcore_count = sum(1 for a in achievements if a.mode == "Hardcore")
         softcore_count = sum(1 for a in achievements if a.mode == "Softcore")
 
-        achievement_mode_text = f"[{profile.profile.user}]({profile.profile.user_url}) has earned "
+        achievement_mode_text = f"[{profile.user}]({profile.user_url}) has earned "
         if hardcore_count > 0 and softcore_count > 0:
             achievement_mode_text += f"{softcore_count} softcore achievement{'s' if softcore_count != 1 else ''} and {hardcore_count} hardcore achievement{'s' if hardcore_count != 1 else ''} today.\n\n"
         elif hardcore_count > 0:

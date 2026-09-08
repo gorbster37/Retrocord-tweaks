@@ -1,5 +1,10 @@
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
+
+try:
+    from config.config import DAILY_OVERVIEW_TIMEZONE
+except ImportError:
+    DAILY_OVERVIEW_TIMEZONE = "America/New_York"
 
 class Progress:
     """
@@ -68,7 +73,7 @@ class Result:
     
     def format_date(self, date: str) -> str:
         """
-        Formats the date to Amsterdam timezone.
+        Formats the date in the configured local timezone.
 
         Args:
             date : str
@@ -81,4 +86,8 @@ class Result:
         """
         if date is None:
             return None
-        return datetime.strptime(date, "%Y-%m-%dT%H:%M:%S%z").astimezone(pytz.timezone('Europe/Amsterdam')).strftime("%d/%m/%y at %H:%M:%S")
+        return (
+            datetime.strptime(date, "%Y-%m-%dT%H:%M:%S%z")
+            .astimezone(ZoneInfo(DAILY_OVERVIEW_TIMEZONE))
+            .strftime("%d/%m/%y at %H:%M:%S")
+        )

@@ -171,6 +171,25 @@ Keep `last_successful_achievement_scan_at` in memory for each tracked user:
 
 This eliminates normal duplicate posts and prevents delayed scans from missing achievements without adding a database or persistent duplicate history.
 
+## Follow-Up Reliability Items
+
+### First-Scan Failure Catch-Up
+
+The existing marker correctly catches up after a failed scan when that user has a prior successful marker. The remaining edge case is a failure during the first scan after a bot restart, before a marker exists: the next scan currently uses only the normal interval.
+
+Keep a small in-memory record of the earliest unconfirmed scan start for that user. On the next attempt, extend the lookback to cover the original failed window through the current time, plus the safety buffer. Clear that record only after the user's achievement messages send successfully. This remains memory-only, so restart duplicate tolerance does not change.
+
+When a user's achievement scan fails, log the last successful marker and the projected catch-up lookback for the next attempt. For example: `Achievement scan failed for user; last successful scan: 20:30 UTC; next scan will use a 61-minute catch-up window.` If no marker exists, log that the first-scan recovery window will be used. This makes delayed delivery visible instead of appearing as a silent loss.
+
+### Required Local File Fallbacks
+
+Every file the bot writes already creates itself when missing. Apply the same graceful behavior to required local configuration data where a safe fallback exists.
+
+- If `emoji.json` is missing, create it with `{}` and log a warning.
+- Treat an empty emoji mapping as valid and use the existing `:video_game:` fallback in embeds.
+- If `emoji.json` is malformed, log a clear warning and use the empty mapping for that run instead of failing the user's entire achievement scan.
+- Do not overwrite a malformed user file automatically; preserve it for inspection and repair.
+
 ## Implementation Steps
 
 ### 1. Add the Shared Request Gate

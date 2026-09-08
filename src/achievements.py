@@ -198,7 +198,7 @@ def create_achievement_embed_v1(game, user, achievement, profile, current, total
     embed.add_field(name="Completion", value=f"{completion}/{game.total_achievements} (**{percentage:.2f}%**)", inline=True)
     embed.set_image(url=DISCORD_IMAGE)
     embed.set_thumbnail(url=achievement.badge_url)
-    embed.set_footer(text=f"{user} • {achievement.date_amsterdam}", icon_url=profile.profile.user_pic_unique)
+    embed.set_footer(text=f"{user} • {achievement.date_local}", icon_url=profile.user_pic_unique)
     embed.set_author(name=f"{achievement.mode} Achievement Unlocked", icon_url=achievement.game_icon)
     return embed
 
@@ -244,7 +244,7 @@ def create_achievement_embed_v2(game, user, achievement, profile, current, total
     embed.add_field(name="Progress", value=f"{completion}/{game.total_achievements} ({percentage:.2f}%)", inline=True)
     embed.set_image(url=DISCORD_IMAGE)
     embed.set_thumbnail(url=achievement.badge_url)
-    embed.set_footer(text=f"{user} • {achievement.date_amsterdam}", icon_url=profile.profile.user_pic_unique)
+    embed.set_footer(text=f"{user} • {achievement.date_local}", icon_url=profile.user_pic_unique)
     embed.set_author(name="Achievement unlocked", icon_url=achievement.game_icon)
     return embed
 
@@ -263,7 +263,7 @@ def create_mastery_embed(game, user, profile, game_progress, mastered_count, mas
         description=(
             f"**[{game.title}]({game.url})** "
             f"{emoji}\n\n"
-            f"This is [{user}]({profile.profile.user_url})'s **{mastered_count}** mastery!\n\n"
+            f"This is [{user}]({profile.user_url})'s **{mastered_count}** mastery!\n\n"
             f"Mastered in {mastery_time}\n\n"
             f"Mastered by {highest_unlock} out of {game.total_players_hardcore} players "
             f"({mastery_percentage}%)"
@@ -273,7 +273,7 @@ def create_mastery_embed(game, user, profile, game_progress, mastered_count, mas
 
     embed.set_footer(
         text=f"{user} • Mastery achieved on {game_progress.highest_award_date_format}",
-        icon_url=profile.profile.user_pic_unique
+        icon_url=profile.user_pic_unique
     )
     embed.add_field(name="Achievements", value=f"{game.total_achievements}", inline=True)
     embed.add_field(name="Points", value=f"{game.total_points} ({game.calculate_total_true_ratio()})", inline=True)
