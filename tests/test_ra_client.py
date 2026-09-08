@@ -139,7 +139,7 @@ class RetroAchievementsClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.seconds_until_daily_window_end(now), 20 * 60)
         client.seconds_until_daily_window_end = lambda: 20 * 60
 
-        await client._wait_for_daily_window("achievement")
-        await client._wait_for_daily_window("daily")
+        await client.wait_for_request_window("achievement")
+        await client.wait_for_request_window("daily")
 
         self.assertEqual(clock.sleeps, [20 * 60])
