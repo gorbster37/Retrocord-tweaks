@@ -106,6 +106,10 @@ class RetroAchievementsClient:
                     )
                 raise
 
+    async def wait_for_request_window(self, request_type: str) -> None:
+        """Wait until this request type is allowed to start."""
+        await self._wait_for_daily_window(request_type)
+
     async def _get_from_lane(
         self,
         lane: CredentialLane,

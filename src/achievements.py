@@ -30,8 +30,10 @@ async def process_achievements(
     mastery_embeds = []
     successful_markers = {}
     for user in users:
-        started_at = scan_state.now()
         try:
+            # Calculate the lookback after Daily Overview releases this request.
+            await client.wait_for_request_window("achievement")
+            started_at = scan_state.now()
             lookback_minutes = scan_state.lookback_minutes(user, started_at)
             recent_achievements = await get_user_recent_achievements(
                 client,
